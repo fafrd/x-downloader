@@ -15,15 +15,14 @@
     button:disabled { opacity: 0.5; cursor: default; }
     #btn-mp4 { background: #1d9bf0; }
     #btn-gif { background: #7856ff; }
-    .panels { display: flex; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
-    .panel { flex: 1 1 280px; min-width: 0; }
-    .panel-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; color: #888; }
+    .output { margin-top: 24px; display: none; }
+    .output-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
     .badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
     .queued  { background: #444; }
     .running { background: #1d5fa0; }
     .done    { background: #1a6634; }
     .error   { background: #7a1a1a; }
-    .log { margin-top: 10px; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 10px 12px; font-family: monospace; font-size: 0.8rem; max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+    .log { background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 10px 12px; font-family: monospace; font-size: 0.8rem; height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
   </style>
 </head>
 <body>
@@ -41,22 +40,20 @@
     </div>
   </form>
   <div id="error" style="margin-top:16px;color:#f88;font-size:0.9rem;"></div>
-  <div class="panels" id="panels" style="display:none">
-    <div class="panel" id="panel-mp4">
-      <div class="panel-label">MP4</div>
-      <div id="status-mp4"></div>
+  <div class="output" id="output">
+    <div class="output-header">
+      <span id="badge" class="badge queued">queued</span>
     </div>
-    <div class="panel" id="panel-gif">
-      <div class="panel-label">GIF</div>
-      <div id="status-gif"></div>
-    </div>
+    <pre class="log" id="log"></pre>
   </div>
 
   <script>
     const btnMp4 = document.getElementById('btn-mp4');
     const btnGif = document.getElementById('btn-gif');
     const errorEl = document.getElementById('error');
-    const panelsEl = document.getElementById('panels');
+    const outputEl = document.getElementById('output');
+    const badgeEl = document.getElementById('badge');
+    const logEl = document.getElementById('log');
 
     function getInputs() {
       const url  = document.getElementById('url').value.trim();
@@ -64,20 +61,21 @@
       return { url, name };
     }
 
-    function showError(msg) {
-      errorEl.textContent = msg;
+    function setButtons(disabled) {
+      btnMp4.disabled = disabled;
+      btnGif.disabled = disabled;
     }
 
     function startJob(format) {
       const { url, name } = getInputs();
-      if (!url || !name) { showError('URL and filename are required.'); return; }
+      if (!url || !name) { errorEl.textContent = 'URL and filename are required.'; return; }
       errorEl.textContent = '';
 
-      const btn = format === 'mp4' ? btnMp4 : btnGif;
-      const statusEl = document.getElementById(`status-${format}`);
-      btn.disabled = true;
-      statusEl.innerHTML = '';
-      panelsEl.style.display = 'flex';
+      setButtons(true);
+      logEl.textContent = '';
+      badgeEl.className = 'badge queued';
+      badgeEl.textContent = 'queued';
+      outputEl.style.display = 'block';
 
       fetch('/api/run', {
         method: 'POST',
@@ -86,31 +84,26 @@
       })
       .then(r => r.json())
       .then(data => {
-        if (data.error) { showError(data.error); btn.disabled = false; return; }
-        watchJob(data.jobId, statusEl, btn);
+        if (data.error) { errorEl.textContent = data.error; setButtons(false); return; }
+        watchJob(data.jobId);
       })
-      .catch(err => { showError(err.message); btn.disabled = false; });
+      .catch(err => { errorEl.textContent = err.message; setButtons(false); });
     }
 
-    function watchJob(jobId, statusEl, btn) {
-      const badge = document.createElement('span');
-      badge.className = 'badge queued';
-      badge.textContent = 'queued';
-      const logEl = document.createElement('pre');
-      logEl.className = 'log';
-      statusEl.appendChild(badge);
-      statusEl.appendChild(logEl);
-
+    function watchJob(jobId) {
       const es = new EventSource(`/api/stream?job=${jobId}`);
       es.onmessage = (ev) => {
         const d = JSON.parse(ev.data);
-        badge.className = `badge ${d.status}`;
-        badge.textContent = d.status;
-        if (d.log && d.log.length) logEl.textContent = d.log.join('\n');
+        badgeEl.className = `badge ${d.status}`;
+        badgeEl.textContent = d.status;
+        if (d.log && d.log.length) {
+          logEl.textContent = d.log.join('\n');
+          logEl.scrollTop = logEl.scrollHeight;
+        }
 
         if (d.status === 'done') {
           es.close();
-          btn.disabled = false;
+          setButtons(false);
           if (d.file) {
             const a = document.createElement('a');
             a.href = d.file;
@@ -121,10 +114,10 @@
           }
         } else if (d.status === 'error') {
           es.close();
-          btn.disabled = false;
+          setButtons(false);
         }
       };
-      es.onerror = () => { es.close(); btn.disabled = false; };
+      es.onerror = () => { es.close(); setButtons(false); };
     }
 
     btnMp4.addEventListener('click', () => startJob('mp4'));
