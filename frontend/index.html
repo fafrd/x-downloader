@@ -2,26 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Tweet to MP4 / GIF</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 60px auto; padding: 0 16px; background: #0f0f0f; color: #e0e0e0; }
-    h1 { font-size: 1.5rem; margin-bottom: 24px; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 0 auto; padding: 32px 16px; background: #0f0f0f; color: #e0e0e0; }
+    h1 { font-size: clamp(1.2rem, 4vw, 1.5rem); margin-bottom: 24px; }
     label { display: block; margin-bottom: 12px; font-size: 0.9rem; }
-    input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 8px 10px; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; color: #e0e0e0; font-size: 0.95rem; }
+    input { display: block; width: 100%; margin-top: 4px; padding: 10px 12px; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; color: #e0e0e0; font-size: 1rem; }
     .buttons { display: flex; gap: 8px; margin-top: 8px; }
-    button { padding: 9px 20px; border: none; border-radius: 6px; color: #fff; font-size: 0.95rem; cursor: pointer; }
+    button { flex: 1; padding: 12px 16px; border: none; border-radius: 6px; color: #fff; font-size: 1rem; cursor: pointer; touch-action: manipulation; }
     button:disabled { opacity: 0.5; cursor: default; }
     #btn-mp4 { background: #1d9bf0; }
     #btn-gif { background: #7856ff; }
-    .panels { display: flex; gap: 16px; margin-top: 24px; }
-    .panel { flex: 1; min-width: 0; }
+    .panels { display: flex; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
+    .panel { flex: 1 1 280px; min-width: 0; }
     .panel-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; color: #888; }
     .badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
     .queued  { background: #444; }
     .running { background: #1d5fa0; }
     .done    { background: #1a6634; }
     .error   { background: #7a1a1a; }
-    .log { margin-top: 10px; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 10px 12px; font-family: monospace; font-size: 0.82rem; max-height: 260px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+    .log { margin-top: 10px; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 10px 12px; font-family: monospace; font-size: 0.8rem; max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
   </style>
 </head>
 <body>
