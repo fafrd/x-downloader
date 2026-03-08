@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Tweet to MP4</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 60px auto; padding: 0 16px; background: #0f0f0f; color: #e0e0e0; }
+    h1 { font-size: 1.5rem; margin-bottom: 24px; }
+    label { display: block; margin-bottom: 12px; font-size: 0.9rem; }
+    input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 8px 10px; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; color: #e0e0e0; font-size: 0.95rem; }
+    button { margin-top: 8px; padding: 9px 20px; background: #1d9bf0; border: none; border-radius: 6px; color: #fff; font-size: 0.95rem; cursor: pointer; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    #status { margin-top: 24px; }
+    .badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
+    .queued  { background: #444; }
+    .running { background: #1d5fa0; }
+    .done    { background: #1a6634; }
+    .error   { background: #7a1a1a; }
+    #log { margin-top: 12px; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 10px 12px; font-family: monospace; font-size: 0.82rem; max-height: 260px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+</style>
+</head>
+<body>
+  <h1>Tweet to MP4</h1>
+  <form id="form">
+    <label>Twitter / X URL
+      <input id="url" type="url" placeholder="https://twitter.com/…" required />
+    </label>
+    <label>Output filename (no extension)
+      <input id="name" placeholder="my-video" required />
+    </label>
+    <button type="submit" id="btn">Download</button>
+  </form>
+  <div id="status"></div>
+
+  <script>
+    const form = document.getElementById('form');
+    const btn  = document.getElementById('btn');
+    const statusEl = document.getElementById('status');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      statusEl.innerHTML = '';
+
+      const url  = document.getElementById('url').value.trim();
+      const name = document.getElementById('name').value.trim();
+
+      let jobId;
+      try {
+        const r = await fetch('/api/run', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, name })
+        });
+        const data = await r.json();
+        if (data.error) { showError(data.error); return; }
+        jobId = data.jobId;
+      } catch (err) {
+        showError(err.message);
+        return;
+      }
+
+      const badge = document.createElement('span');
+      badge.className = 'badge queued';
+      badge.textContent = 'queued';
+      const logEl = document.createElement('pre');
+      logEl.id = 'log';
+      statusEl.appendChild(badge);
+      statusEl.appendChild(logEl);
+
+      const es = new EventSource(`/api/stream?job=${jobId}`);
+      es.onmessage = (ev) => {
+        const d = JSON.parse(ev.data);
+        badge.className = `badge ${d.status}`;
+        badge.textContent = d.status;
+        if (d.log && d.log.length) logEl.textContent = d.log.join('\n');
+
+        if (d.status === 'done') {
+          es.close();
+          btn.disabled = false;
+          if (d.file) {
+            const a = document.createElement('a');
+            a.href = d.file;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+          }
+        } else if (d.status === 'error') {
+          es.close();
+          btn.disabled = false;
+        }
+      };
+      es.onerror = () => { es.close(); btn.disabled = false; };
+    });
+
+    function showError(msg) {
+      const badge = document.createElement('span');
+      badge.className = 'badge error';
+      badge.textContent = 'error';
+      const text = document.createTextNode(' ' + msg);
+      statusEl.replaceChildren(badge, text);
+      btn.disabled = false;
+    }
+  </script>
+</body>
+</html>
