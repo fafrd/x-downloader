@@ -1,0 +1,5 @@
+backend/node_modules
+.git
+*.md
+PLAN.md
+nginx.conf

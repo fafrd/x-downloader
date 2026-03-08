@@ -4,9 +4,10 @@ const path = require('path');
 const fs = require('fs');
 const app = express();
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '..', 'frontend')));
 
-const PORT = process.env.PORT || 4456;
-const OUTPUT_DIR = '/srv/tweet/output';
+const PORT = process.env.PORT || 8080;
+const OUTPUT_DIR = process.env.OUTPUT_DIR || '/tmp/tweet-output';
 
 let jobs = {};
 let queue = [];
@@ -109,8 +110,7 @@ app.get('/api/stream', (req, res) => {
   res.set({
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
-    'X-Accel-Buffering': 'no'
+    'Connection': 'keep-alive'
   });
   res.flushHeaders();
 
