@@ -32,19 +32,30 @@ function startNext() {
   const next = queue.shift();
   if (!next) return;
   running = next;
-  const { id, url, name } = next;
+  const { id, url, name, format } = next;
   ensureOutput();
 
   jobs[id].status = 'running';
   jobs[id].log = [];
   broadcast(id);
 
-  const proc = spawn('gallery-dl', [
-    '--filter', "extension == 'mp4'",
-    '-D', OUTPUT_DIR,
-    '-f', `${name}.{extension}`,
-    url
-  ]);
+  let proc;
+  if (format === 'gif') {
+    const gifPath = path.join(OUTPUT_DIR, `${name}.gif`);
+    proc = spawn('gallery-dl', [
+      '--filter', "type == 'animated_gif'",
+      '-D', OUTPUT_DIR,
+      '--exec', `ffmpeg -y -i {} -vf "fps=15,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 ${gifPath}`,
+      url
+    ]);
+  } else {
+    proc = spawn('gallery-dl', [
+      '--filter', "extension == 'mp4'",
+      '-D', OUTPUT_DIR,
+      '-f', `${name}.{extension}`,
+      url
+    ]);
+  }
   jobs[id].pid = proc.pid;
 
   const appendLog = (data) => {
@@ -61,15 +72,14 @@ function startNext() {
   proc.on('close', (code) => {
     if (code === 0) {
       jobs[id].status = 'done';
-      const mp4 = path.join(OUTPUT_DIR, `${name}.mp4`);
-      if (fs.existsSync(mp4)) {
-        jobs[id].file = `/output/${name}.mp4`;
+      const filePath = path.join(OUTPUT_DIR, `${name}.${format}`);
+      if (fs.existsSync(filePath)) {
+        jobs[id].file = `/output/${name}.${format}`;
       }
     } else {
       jobs[id].status = 'error';
     }
     broadcast(id);
-    // close all SSE clients
     for (const res of jobs[id].clients) {
       res.end();
     }
@@ -83,7 +93,7 @@ const ALLOWED_URL = /^https?:\/\/(www\.)?(twitter\.com|x\.com|t\.co)\//i;
 const ALLOWED_NAME = /^[a-zA-Z0-9_-]{1,100}$/;
 
 app.post('/api/run', (req, res) => {
-  const { url, name } = req.body || {};
+  const { url, name, format } = req.body || {};
   if (!url || !name) {
     return res.status(400).json({ error: 'url and name required' });
   }
@@ -93,10 +103,11 @@ app.post('/api/run', (req, res) => {
   if (!ALLOWED_NAME.test(name)) {
     return res.status(400).json({ error: 'name must be 1-100 characters: letters, numbers, hyphens, underscores only' });
   }
+  const fmt = format === 'gif' ? 'gif' : 'mp4';
   ensureOutput();
   const id = nextJob++;
-  jobs[id] = { id, url, name, status: 'queued', log: [], clients: [], file: null };
-  queue.push({ id, url, name });
+  jobs[id] = { id, url, name, format: fmt, status: 'queued', log: [], clients: [], file: null };
+  queue.push({ id, url, name, format: fmt });
   if (!running) startNext();
   res.json({ jobId: id });
 });
@@ -114,7 +125,6 @@ app.get('/api/stream', (req, res) => {
   });
   res.flushHeaders();
 
-  // Send current state immediately
   const data = JSON.stringify({ job: id, status: jobs[id].status, log: jobs[id].log, file: jobs[id].file || null });
   res.write(`data: ${data}\n\n`);
 
@@ -132,7 +142,9 @@ app.get('/api/stream', (req, res) => {
 // One-shot download: serve the file then delete it
 app.get('/output/:file', (req, res) => {
   const name = req.params.file;
-  if (!ALLOWED_NAME.test(path.basename(name, '.mp4')) || !name.endsWith('.mp4')) {
+  const ext = path.extname(name);
+  const base = path.basename(name, ext);
+  if (!ALLOWED_NAME.test(base) || !['.mp4', '.gif'].includes(ext)) {
     return res.status(400).end();
   }
   const filePath = path.join(OUTPUT_DIR, name);

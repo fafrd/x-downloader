@@ -2,25 +2,30 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Tweet to MP4</title>
+  <title>Tweet to MP4 / GIF</title>
   <style>
-    body { font-family: system-ui, sans-serif; max-width: 600px; margin: 60px auto; padding: 0 16px; background: #0f0f0f; color: #e0e0e0; }
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 60px auto; padding: 0 16px; background: #0f0f0f; color: #e0e0e0; }
     h1 { font-size: 1.5rem; margin-bottom: 24px; }
     label { display: block; margin-bottom: 12px; font-size: 0.9rem; }
     input { display: block; width: 100%; box-sizing: border-box; margin-top: 4px; padding: 8px 10px; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; color: #e0e0e0; font-size: 0.95rem; }
-    button { margin-top: 8px; padding: 9px 20px; background: #1d9bf0; border: none; border-radius: 6px; color: #fff; font-size: 0.95rem; cursor: pointer; }
+    .buttons { display: flex; gap: 8px; margin-top: 8px; }
+    button { padding: 9px 20px; border: none; border-radius: 6px; color: #fff; font-size: 0.95rem; cursor: pointer; }
     button:disabled { opacity: 0.5; cursor: default; }
-    #status { margin-top: 24px; }
+    #btn-mp4 { background: #1d9bf0; }
+    #btn-gif { background: #7856ff; }
+    .panels { display: flex; gap: 16px; margin-top: 24px; }
+    .panel { flex: 1; min-width: 0; }
+    .panel-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; color: #888; }
     .badge { display: inline-block; padding: 3px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
     .queued  { background: #444; }
     .running { background: #1d5fa0; }
     .done    { background: #1a6634; }
     .error   { background: #7a1a1a; }
-    #log { margin-top: 12px; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 10px 12px; font-family: monospace; font-size: 0.82rem; max-height: 260px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
-</style>
+    .log { margin-top: 10px; background: #1a1a1a; border: 1px solid #333; border-radius: 6px; padding: 10px 12px; font-family: monospace; font-size: 0.82rem; max-height: 260px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  </style>
 </head>
 <body>
-  <h1>Tweet to MP4</h1>
+  <h1>Tweet to MP4 / GIF</h1>
   <form id="form">
     <label>Twitter / X URL
       <input id="url" type="url" placeholder="https://twitter.com/…" required />
@@ -28,43 +33,69 @@
     <label>Output filename (no extension)
       <input id="name" placeholder="my-video" required />
     </label>
-    <button type="submit" id="btn">Download</button>
+    <div class="buttons">
+      <button type="button" id="btn-mp4">&#8595; MP4</button>
+      <button type="button" id="btn-gif">&#8595; GIF</button>
+    </div>
   </form>
-  <div id="status"></div>
+  <div id="error" style="margin-top:16px;color:#f88;font-size:0.9rem;"></div>
+  <div class="panels" id="panels" style="display:none">
+    <div class="panel" id="panel-mp4">
+      <div class="panel-label">MP4</div>
+      <div id="status-mp4"></div>
+    </div>
+    <div class="panel" id="panel-gif">
+      <div class="panel-label">GIF</div>
+      <div id="status-gif"></div>
+    </div>
+  </div>
 
   <script>
-    const form = document.getElementById('form');
-    const btn  = document.getElementById('btn');
-    const statusEl = document.getElementById('status');
+    const btnMp4 = document.getElementById('btn-mp4');
+    const btnGif = document.getElementById('btn-gif');
+    const errorEl = document.getElementById('error');
+    const panelsEl = document.getElementById('panels');
 
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      btn.disabled = true;
-      statusEl.innerHTML = '';
-
+    function getInputs() {
       const url  = document.getElementById('url').value.trim();
       const name = document.getElementById('name').value.trim();
+      return { url, name };
+    }
 
-      let jobId;
-      try {
-        const r = await fetch('/api/run', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url, name })
-        });
-        const data = await r.json();
-        if (data.error) { showError(data.error); return; }
-        jobId = data.jobId;
-      } catch (err) {
-        showError(err.message);
-        return;
-      }
+    function showError(msg) {
+      errorEl.textContent = msg;
+    }
 
+    function startJob(format) {
+      const { url, name } = getInputs();
+      if (!url || !name) { showError('URL and filename are required.'); return; }
+      errorEl.textContent = '';
+
+      const btn = format === 'mp4' ? btnMp4 : btnGif;
+      const statusEl = document.getElementById(`status-${format}`);
+      btn.disabled = true;
+      statusEl.innerHTML = '';
+      panelsEl.style.display = 'flex';
+
+      fetch('/api/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, name, format })
+      })
+      .then(r => r.json())
+      .then(data => {
+        if (data.error) { showError(data.error); btn.disabled = false; return; }
+        watchJob(data.jobId, statusEl, btn);
+      })
+      .catch(err => { showError(err.message); btn.disabled = false; });
+    }
+
+    function watchJob(jobId, statusEl, btn) {
       const badge = document.createElement('span');
       badge.className = 'badge queued';
       badge.textContent = 'queued';
       const logEl = document.createElement('pre');
-      logEl.id = 'log';
+      logEl.className = 'log';
       statusEl.appendChild(badge);
       statusEl.appendChild(logEl);
 
@@ -92,16 +123,10 @@
         }
       };
       es.onerror = () => { es.close(); btn.disabled = false; };
-    });
-
-    function showError(msg) {
-      const badge = document.createElement('span');
-      badge.className = 'badge error';
-      badge.textContent = 'error';
-      const text = document.createTextNode(' ' + msg);
-      statusEl.replaceChildren(badge, text);
-      btn.disabled = false;
     }
+
+    btnMp4.addEventListener('click', () => startJob('mp4'));
+    btnGif.addEventListener('click', () => startJob('gif'));
   </script>
 </body>
 </html>
