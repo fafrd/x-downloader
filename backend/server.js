@@ -83,7 +83,7 @@ function startNext() {
     const palettePath = path.join(OUTPUT_DIR, `${name}_palette.png`);
     const pass1 = spawn('ffmpeg', [
       '-y', '-i', mp4Path,
-      '-vf', 'fps=10,scale=480:-1:flags=lanczos,palettegen',
+      '-vf', 'fps=15,scale=480:-1:flags=lanczos,palettegen',
       palettePath
     ]);
     pass1.stdout.on('data', appendLog);
@@ -95,7 +95,7 @@ function startNext() {
       }
       const pass2 = spawn('ffmpeg', [
         '-y', '-i', mp4Path, '-i', palettePath,
-        '-filter_complex', 'fps=10,scale=480:-1:flags=lanczos[x];[x][1:v]paletteuse',
+        '-filter_complex', 'fps=15,scale=480:-1:flags=lanczos[x];[x][1:v]paletteuse',
         '-loop', '0',
         gifPath
       ]);
