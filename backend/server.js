@@ -79,20 +79,35 @@ function startNext() {
       return finishJob('done', file);
     }
 
-    // Convert mp4 -> gif with ffmpeg
-    const ffmpeg = spawn('ffmpeg', [
+    // Convert mp4 -> gif with ffmpeg (two-pass: palette file avoids split filter OOM)
+    const palettePath = path.join(OUTPUT_DIR, `${name}_palette.png`);
+    const pass1 = spawn('ffmpeg', [
       '-y', '-i', mp4Path,
-      '-vf', 'fps=15,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse',
-      '-loop', '0',
-      gifPath
+      '-vf', 'fps=10,scale=480:-1:flags=lanczos,palettegen',
+      palettePath
     ]);
-    ffmpeg.stdout.on('data', appendLog);
-    ffmpeg.stderr.on('data', appendLog);
-    ffmpeg.on('close', (ffCode) => {
-      fs.unlink(mp4Path, () => {});
-      if (ffCode !== 0) return finishJob('error');
-      const file = fs.existsSync(gifPath) ? `/output/${name}.gif` : null;
-      finishJob('done', file);
+    pass1.stdout.on('data', appendLog);
+    pass1.stderr.on('data', appendLog);
+    pass1.on('close', (p1Code) => {
+      if (p1Code !== 0) {
+        fs.unlink(mp4Path, () => {});
+        return finishJob('error');
+      }
+      const pass2 = spawn('ffmpeg', [
+        '-y', '-i', mp4Path, '-i', palettePath,
+        '-filter_complex', 'fps=10,scale=480:-1:flags=lanczos[x];[x][1:v]paletteuse',
+        '-loop', '0',
+        gifPath
+      ]);
+      pass2.stdout.on('data', appendLog);
+      pass2.stderr.on('data', appendLog);
+      pass2.on('close', (p2Code) => {
+        fs.unlink(mp4Path, () => {});
+        fs.unlink(palettePath, () => {});
+        if (p2Code !== 0) return finishJob('error');
+        const file = fs.existsSync(gifPath) ? `/output/${name}.gif` : null;
+        finishJob('done', file);
+      });
     });
   });
 }
