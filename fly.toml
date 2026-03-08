@@ -20,5 +20,4 @@ primary_region = "ams"
     path = "/"
 
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "256mb"
+  size = "performance-1x"
