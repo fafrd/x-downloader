@@ -1,8 +1,5 @@
-app = "tweet-to-mp4"
-primary_region = "ord"
-
-[build]
-  dockerfile = "Dockerfile"
+app = "x-downloader-kjem6q"
+primary_region = "ams"
 
 [env]
   PORT = "4455"
@@ -13,6 +10,7 @@ primary_region = "ord"
   auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 0
+  processes = ["app"]
 
   [[http_service.checks]]
     interval = "15s"
