@@ -5,10 +5,10 @@ primary_region = "ord"
   dockerfile = "Dockerfile"
 
 [env]
-  PORT = "8080"
+  PORT = "4455"
 
 [http_service]
-  internal_port = 8080
+  internal_port = 4455
   force_https = true
   auto_stop_machines = "stop"
   auto_start_machines = true
