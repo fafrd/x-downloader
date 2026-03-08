@@ -39,25 +39,6 @@ function startNext() {
   jobs[id].log = [];
   broadcast(id);
 
-  let proc;
-  if (format === 'gif') {
-    const gifPath = path.join(OUTPUT_DIR, `${name}.gif`);
-    proc = spawn('gallery-dl', [
-      '--filter', "type == 'animated_gif'",
-      '-D', OUTPUT_DIR,
-      '--exec', `ffmpeg -y -i {} -vf "fps=15,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" -loop 0 ${gifPath}`,
-      url
-    ]);
-  } else {
-    proc = spawn('gallery-dl', [
-      '--filter', "extension == 'mp4'",
-      '-D', OUTPUT_DIR,
-      '-f', `${name}.{extension}`,
-      url
-    ]);
-  }
-  jobs[id].pid = proc.pid;
-
   const appendLog = (data) => {
     const line = data.toString().trim();
     if (line) {
@@ -66,26 +47,53 @@ function startNext() {
     }
   };
 
+  const finishJob = (status, file) => {
+    jobs[id].status = status;
+    if (file) jobs[id].file = file;
+    broadcast(id);
+    for (const res of jobs[id].clients) res.end();
+    jobs[id].clients = [];
+    running = null;
+    startNext();
+  };
+
+  const mp4Path = path.join(OUTPUT_DIR, `${name}.mp4`);
+  const gifPath = path.join(OUTPUT_DIR, `${name}.gif`);
+
+  const proc = spawn('gallery-dl', [
+    '--filter', "extension == 'mp4'",
+    '-D', OUTPUT_DIR,
+    '-f', `${name}.{extension}`,
+    url
+  ]);
+  jobs[id].pid = proc.pid;
+
   proc.stdout.on('data', appendLog);
   proc.stderr.on('data', appendLog);
 
   proc.on('close', (code) => {
-    if (code === 0) {
-      jobs[id].status = 'done';
-      const filePath = path.join(OUTPUT_DIR, `${name}.${format}`);
-      if (fs.existsSync(filePath)) {
-        jobs[id].file = `/output/${name}.${format}`;
-      }
-    } else {
-      jobs[id].status = 'error';
+    if (code !== 0) return finishJob('error');
+
+    if (format === 'mp4') {
+      const file = fs.existsSync(mp4Path) ? `/output/${name}.mp4` : null;
+      return finishJob('done', file);
     }
-    broadcast(id);
-    for (const res of jobs[id].clients) {
-      res.end();
-    }
-    jobs[id].clients = [];
-    running = null;
-    startNext();
+
+    // Convert mp4 -> gif with ffmpeg
+    const ffmpeg = spawn('ffmpeg', [
+      '-y', '-i', mp4Path,
+      '-vf', 'fps=15,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse',
+      '-loop', '0',
+      gifPath
+    ]);
+    ffmpeg.stdout.on('data', appendLog);
+    ffmpeg.stderr.on('data', appendLog);
+    ffmpeg.on('close', (ffCode) => {
+      fs.unlink(mp4Path, () => {});
+      if (ffCode !== 0) return finishJob('error');
+      const file = fs.existsSync(gifPath) ? `/output/${name}.gif` : null;
+      finishJob('done', file);
+    });
   });
 }
 
